@@ -12,7 +12,7 @@ const upload = multer({ storage });
 
 router.post("/upload-document", auth, upload.single("file"), uploadDocument);
 router.get("/documents", auth, getDocuments);
-router.put("/documents/:id", auth, updateDocument);
+router.put("/documents/:id", auth, upload.single("file"), updateDocument);
 router.delete("/documents/:id", auth, deleteDocument);
 
 module.exports = router;
