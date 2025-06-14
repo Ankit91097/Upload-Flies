@@ -20,7 +20,8 @@ exports.uploadDocument = async (req, res) => {
       ContentType: req.file.mimetype,
     };
 
-    const data = await s3.upload(uploadParams).promise();
+    // const data = await s3.upload(uploadParams).promise();
+    const data = await s3.send(new PutObjectCommand(uploadParams));
     try {
       fs.unlinkSync(localFile);
       console.log("Temp file deleted:", localFile);
