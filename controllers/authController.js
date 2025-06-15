@@ -5,13 +5,31 @@ const sendEmail=require('../utils/sendEmail')
 
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
+
+    // Check if user already exists
     const existing = await User.findOne({ email });
     if (existing) return res.status(400).json({ msg: "User already exists" });
 
+    // Count how many users already exist
+    const userCount = await User.countDocuments();
+
+    // If no users yet → make first user an admin
+    const role = userCount === 0 ? "admin" : "client";
+
+    // Hash password and save
     const hashed = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, password: hashed, role });
-    res.status(201).json({ msg: "Registered successfully" ,user});
+
+    res.status(201).json({
+      msg: `Registered successfully as ${role}`,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
   } catch (err) {
     res.status(500).json({ msg: "Server Error", error: err.message });
   }

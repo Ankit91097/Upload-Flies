@@ -8,10 +8,14 @@ const documentSchema = new mongoose.Schema({
   fileUrl: String,
   expiryDate: Date,
   createdAt: { type: Date, default: Date.now },
-  reminderSent: {
-    type: Boolean,
-    default: false,
-  },
+  // reminderSent: {
+  //   type: Boolean,
+  //   default: false,
+  // },
+  reminderHistory: [{
+  sentAt: Date
+}]
+
 });
 
 module.exports = mongoose.model("Document", documentSchema);

@@ -68,6 +68,16 @@ exports.updateDocument = async (req, res) => {
 
     let newFileUrl = document.fileUrl;
 
+     // Step 1: Check if expiry date changed
+    if (
+      req.body.expiryDate &&
+      new Date(req.body.expiryDate).toISOString() !== document.expiryDate.toISOString()
+    ) {
+      document.reminderHistory = []; // Clear reminder history
+      console.log("🕒 Expiry date changed — cleared reminder history.");
+      await document.save();
+    }
+
     // If file is provided in update request
     if (req.file) {
       // Step 1: DELETE OLD FILE FROM S3
@@ -125,31 +135,43 @@ exports.updateDocument = async (req, res) => {
 
 exports.deleteDocument = async (req, res) => {
   try {
+    // Step 1: Find the document
     const document = await Document.findById(req.params.id);
-    if (!document) return res.status(404).json({ msg: "Document not found" });
-
-    // 🔥 Step 1: Delete from S3
-    if (document.fileUrl) {
-      const fileKey = decodeURIComponent(document.fileUrl.split(".com/")[1]);
-
-      const deleteParams = {
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: fileKey,
-      };
-
-      await s3.send(new DeleteObjectCommand(deleteParams));
-      console.log("Deleted file from S3:", fileKey);
+    if (!document) {
+      return res.status(404).json({ msg: "Document not found" });
     }
 
-    // 🗑️ Step 2: Delete from MongoDB
+    // Step 2: Delete file from S3 if it exists
+    if (document.fileUrl) {
+      try {
+        // ✅ Extract correct file key from URL
+        const url = new URL(document.fileUrl);
+        const fileKey = decodeURIComponent(url.pathname.substring(1)); // removes the starting "/"
+
+        const deleteParams = {
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: fileKey,
+        };
+
+        await s3.send(new DeleteObjectCommand(deleteParams));
+        console.log("🗑️ Deleted file from S3:", fileKey);
+      } catch (s3Err) {
+        console.error("❌ Failed to delete from S3:", s3Err.message);
+        // Proceed anyway — file might already be gone
+      }
+    }
+
+    // Step 3: Delete document from MongoDB
     await Document.findByIdAndDelete(req.params.id);
+    console.log("🗃️ Document deleted from DB:", req.params.id);
 
     res.json({ msg: "Document and file deleted successfully" });
   } catch (err) {
     console.error("Delete error:", err);
     res.status(500).json({
       msg: "Delete failed",
-      error: typeof err === "object" ? JSON.stringify(err, null, 2) : err.message,
+      error:
+        typeof err === "object" ? JSON.stringify(err, null, 2) : err.message,
     });
   }
 };

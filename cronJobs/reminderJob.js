@@ -1,32 +1,39 @@
-
 const cron = require("node-cron");
 const Document = require("../models/Document");
 const sendEmail = require("../utils/sendEmail");
 
 cron.schedule("* * * * *", async () => {
-  console.log("🔔 Running reminder check...");
+  console.log("🔔 Running 4-hour reminder check...");
 
   const now = new Date();
-  const nextMinute = new Date(now.getTime() + 60 * 1000);
 
-  // 📌 Find documents expiring soon AND not already reminded
-  const expiringDocs = await Document.find({
-    expiryDate: { $lte: nextMinute },
-    reminderSent: false
-  }).populate("client");
+  const documents = await Document.find().populate("client");
 
-  for (let doc of expiringDocs) {
-    const message = `Hello ${doc.client.name},\n\nThis is a reminder that your document "${doc.name}" is expiring on ${new Date(doc.expiryDate).toLocaleString()}.\n\nPlease take necessary action.`;
+  for (let doc of documents) {
+    if (!doc.expiryDate || !doc.client || !doc.client.email) continue;
 
-    try {
-      await sendEmail(doc.client.email, "⏰ Document Expiry Reminder", message);
-      console.log(`📧 Sent reminder to ${doc.client.email} for "${doc.name}"`);
+    const expiry = new Date(doc.expiryDate);
+    const twoDaysBefore = new Date(expiry.getTime() - 2 * 24 * 60 * 60 * 1000); // 2 days before
 
-      // ✅ Mark reminder as sent
-      doc.reminderSent = true;
-      await doc.save();
-    } catch (err) {
-      console.error(`❌ Failed to send email for ${doc.name}:`, err.message);
+    // Only remind between (expiry - 2 days) and expiry
+    if (now >= twoDaysBefore && now <= expiry) {
+      const lastReminder = doc.reminderHistory?.slice(-1)[0]?.sentAt;
+      const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+
+      // If no reminder or last one was more than 4 hours ago
+      if (!lastReminder || new Date(lastReminder) <= fourHoursAgo) {
+        const message = `Hello ${doc.client.name},\n\nThis is a reminder that your document "${doc.name}" is expiring on ${expiry.toDateString()}.\n\nPlease take action before expiry.`;
+
+        try {
+          await sendEmail(doc.client.email, "⏰ Document Expiry Reminder", message);
+          console.log(`📧 Sent reminder to ${doc.client.email} for "${doc.name}"`);
+
+          doc.reminderHistory.push({ sentAt: now });
+          await doc.save();
+        } catch (err) {
+          console.error(`❌ Failed to send reminder for ${doc.name}:`, err.message);
+        }
+      }
     }
   }
 });
