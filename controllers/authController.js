@@ -76,22 +76,35 @@ exports.sendOTP = async (req, res) => {
 };
 
 exports.verifyOTP = async (req, res) => {
-  const { email, otp } = req.body;
-  const user = await User.findOne({ email });
+  const { otp } = req.body;
+
+  // Check if OTP is provided
+  if (!otp) return res.status(400).json({ msg: "OTP is required" });
+
+  // Find the user whose OTP matches
+  const user = await User.findOne({ "resetOTP.code": otp });
 
   if (!user || !user.resetOTP)
     return res.status(400).json({ msg: "Invalid or expired OTP" });
 
   const { code, expiresAt } = user.resetOTP;
 
+  // Check expiry
   if (Date.now() > new Date(expiresAt))
     return res.status(400).json({ msg: "OTP expired" });
 
+  // Match the OTP (already matched via findOne, but double check)
   if (code !== otp)
     return res.status(400).json({ msg: "Incorrect OTP" });
 
-  res.json({ msg: "OTP verified successfully" });
+  // ✅ Optional: Clear OTP after success
+  user.resetOTP = undefined;
+  await user.save();
+
+  // ✅ Send back email (to pass to reset password page)
+  res.json({ msg: "OTP verified", email: user.email });
 };
+
 
 exports.resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
