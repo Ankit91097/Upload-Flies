@@ -2,7 +2,7 @@ const cron = require("node-cron");
 const Document = require("../models/Document");
 const sendEmail = require("../utils/sendEmail");
 
-cron.schedule("* * * * *", async () => {
+cron.schedule("0 */4 * * *", async () => {
   console.log("🔔 Running 4-hour reminder check...");
 
   const now = new Date();
