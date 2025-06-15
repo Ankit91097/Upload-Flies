@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { uploadDocument, getDocuments, updateDocument, deleteDocument } = require("../controllers/documentController");
+const { uploadDocument, getDocuments, updateDocument, deleteDocument, getSingleDocument } = require("../controllers/documentController");
 const auth = require("../middlewares/auth");
 const multer = require("multer");
 
@@ -14,5 +14,7 @@ router.post("/upload-document", auth, upload.single("file"), uploadDocument);
 router.get("/documents", auth, getDocuments);
 router.put("/documents/:id", auth, upload.single("file"), updateDocument);
 router.delete("/documents/:id", auth, deleteDocument);
+router.get("/documents/:id", auth, getSingleDocument);
+
 
 module.exports = router;

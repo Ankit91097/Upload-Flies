@@ -5,9 +5,15 @@ const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
 const { DeleteObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
 
+
 exports.uploadDocument = async (req, res) => {
   try {
     const { name, type, description, expiryDate } = req.body;
+
+    if (!req.file) {
+      return res.status(400).json({ msg: "No file uploaded" });
+    }
+    console.log(req.file)
     const localFile = req.file.path;
     const fileStream = fs.createReadStream(localFile);
     const fileExtension = path.extname(req.file.originalname);
@@ -18,33 +24,38 @@ exports.uploadDocument = async (req, res) => {
       Key: s3Key,
       Body: fileStream,
       ContentType: req.file.mimetype,
+      ACL: "public-read", // Required for access
     };
 
-    // const data = await s3.upload(uploadParams).promise();
-    const data = await s3.send(new PutObjectCommand(uploadParams));
+    await s3.send(new PutObjectCommand(uploadParams));
+
+    const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+    console.log("👉 File URL:", fileUrl); // 🧪 DEBUG
+
+    // Delete temp file
     try {
       fs.unlinkSync(localFile);
-      console.log("Temp file deleted:", localFile);
+      console.log("✅ Temp file deleted:", localFile);
     } catch (err) {
-      console.error("Temp file not deleted:", err.message);
+      console.error("❌ Failed to delete local file:", err.message);
     }
 
+    // Save to DB
     const doc = await Document.create({
       client: req.user.id,
       name,
       type,
       description,
       expiryDate,
-      fileUrl: data.Location,
+      fileUrl,
     });
 
-    res.status(201).json({ msg: "Uploaded to S3", document: doc });
+    res.status(201).json({ msg: "Uploaded successfully", document: doc });
   } catch (err) {
-    console.error("Upload Error:", err);
+    console.error("❌ Upload Error:", err);
     res.status(500).json({
-      msg: "Upload error",
-      error:
-        typeof err === "object" ? JSON.stringify(err, null, 2) : err.message,
+      msg: "Upload failed",
+      error: err.message || "Something went wrong",
     });
   }
 };
@@ -68,10 +79,11 @@ exports.updateDocument = async (req, res) => {
 
     let newFileUrl = document.fileUrl;
 
-     // Step 1: Check if expiry date changed
+    // Step 1: Check if expiry date changed
     if (
       req.body.expiryDate &&
-      new Date(req.body.expiryDate).toISOString() !== document.expiryDate.toISOString()
+      new Date(req.body.expiryDate).toISOString() !==
+        document.expiryDate.toISOString()
     ) {
       document.reminderHistory = []; // Clear reminder history
       console.log("🕒 Expiry date changed — cleared reminder history.");
@@ -173,5 +185,17 @@ exports.deleteDocument = async (req, res) => {
       error:
         typeof err === "object" ? JSON.stringify(err, null, 2) : err.message,
     });
+  }
+};
+
+exports.getSingleDocument = async (req, res) => {
+  try {
+    const doc = await Document.findById(req.params.id).select("+fileUrl");
+    if (!doc) {
+      return res.status(404).json({ msg: "Document not found" });
+    }
+    res.json(doc);
+  } catch (err) {
+    res.status(500).json({ msg: "Server error", error: err.message });
   }
 };

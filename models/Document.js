@@ -5,17 +5,21 @@ const documentSchema = new mongoose.Schema({
   name: String,
   type: String,
   description: String,
-  fileUrl: String,
+  fileUrl: {
+    type: String,
+    required: true,
+  },
   expiryDate: Date,
   createdAt: { type: Date, default: Date.now },
   // reminderSent: {
   //   type: Boolean,
   //   default: false,
   // },
-  reminderHistory: [{
-  sentAt: Date
-}]
-
+  reminderHistory: [
+    {
+      sentAt: Date,
+    },
+  ],
 });
 
 module.exports = mongoose.model("Document", documentSchema);
