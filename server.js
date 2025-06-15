@@ -18,7 +18,6 @@ app.use("/api", authRoutes);
 app.use("/api", documentRoutes);
 app.use("/api", notificationRoutes);
 
-// require("./cronJobs/reminderJob"); // Start cron job
 
-app.listen(5000, () => console.log("Server running on port 5000"));
+app.listen(process.env.PORT, () => console.log(`Server running on port ${process.env.PORT}`));
 require("./cronJobs/reminderJob"); // <-- add this line after all routes
