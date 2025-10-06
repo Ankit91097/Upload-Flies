@@ -1,7 +1,8 @@
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const sendEmail=require('../utils/sendEmail')
+const sendEmail = require("../utils/sendEmail");
+const redis = require("../config/redis");
 
 exports.register = async (req, res) => {
   try {
@@ -20,6 +21,13 @@ exports.register = async (req, res) => {
     // Hash password and save
     const hashed = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, password: hashed, role });
+    await redis.set(`user:${user._id}`, JSON.stringify(user));
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
 
     res.status(201).json({
       msg: `Registered successfully as ${role}`,
@@ -44,21 +52,37 @@ exports.login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ msg: "Invalid credentials" });
 
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1d" });
-    res.json({ token, user: { id: user._id, name: user.name, role: user.role } });
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+    await redis.set(`user:${user._id}`, JSON.stringify(user));
+    res.json({
+      token,
+      user: { id: user._id, name: user.name, role: user.role },
+    });
   } catch (err) {
     res.status(500).json({ msg: "Server Error", error: err.message });
   }
 };
 
 exports.logout = async (req, res, next) => {
-  res.clearCookie("token");
-  res.status(200).json({
-    success: true,
-    message: "Client logged out successfully",
-  });
+  try {
+    const { token } = req.cookies;
+    if (!token) {
+      return res.status(400).json({ msg: "No token found" });
+    }
+    await redis.set(`blackList:${token}`, true);
+    res.clearCookie("token");
+    res.status(200).json({
+      success: true,
+      message: "Client logged out successfully",
+    });
+  } catch (error) {
+    res.status(500).json({ msg: "Server Error", error: error.message });
+  }
 };
-
 
 exports.sendOTP = async (req, res) => {
   const { email } = req.body;
@@ -94,8 +118,7 @@ exports.verifyOTP = async (req, res) => {
     return res.status(400).json({ msg: "OTP expired" });
 
   // Match the OTP (already matched via findOne, but double check)
-  if (code !== otp)
-    return res.status(400).json({ msg: "Incorrect OTP" });
+  if (code !== otp) return res.status(400).json({ msg: "Incorrect OTP" });
 
   // ✅ Optional: Clear OTP after success
   user.resetOTP = undefined;
@@ -105,14 +128,16 @@ exports.verifyOTP = async (req, res) => {
   res.json({ msg: "OTP verified", email: user.email });
 };
 
-
 exports.resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
   const user = await User.findOne({ email });
 
   if (!user || !user.resetOTP) return res.status(400).json({ msg: "Invalid" });
 
-  if (user.resetOTP.code !== otp || Date.now() > new Date(user.resetOTP.expiresAt)) {
+  if (
+    user.resetOTP.code !== otp ||
+    Date.now() > new Date(user.resetOTP.expiresAt)
+  ) {
     return res.status(400).json({ msg: "OTP invalid or expired" });
   }
 
