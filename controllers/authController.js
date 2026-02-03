@@ -2,7 +2,7 @@ const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const sendEmail = require("../utils/sendEmail");
-const redis = require("../config/redis");
+// const redis = require("../config/redis");
 
 exports.register = async (req, res) => {
   try {
@@ -21,7 +21,7 @@ exports.register = async (req, res) => {
     // Hash password and save
     const hashed = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, password: hashed, role });
-    await redis.set(`user:${user._id}`, JSON.stringify(user));
+    // await redis.set(`user:${user._id}`, JSON.stringify(user));
 
     const token = jwt.sign(
       { id: user._id, role: user.role },
@@ -57,7 +57,7 @@ exports.login = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
-    await redis.set(`user:${user._id}`, JSON.stringify(user));
+    // await redis.set(`user:${user._id}`, JSON.stringify(user));
     res.json({
       token,
       user: { id: user._id, name: user.name, role: user.role },
@@ -73,7 +73,7 @@ exports.logout = async (req, res, next) => {
     if (!token) {
       return res.status(400).json({ msg: "No token found" });
     }
-    await redis.set(`blackList:${token}`, true);
+    // await redis.set(`blackList:${token}`, true);
     res.clearCookie("token");
     res.status(200).json({
       success: true,
